@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<head>
+  <title>Binder UI</title>
+</head>
+<body>
+  Hello, {{ name }}!
+  <div>This should do {{ nothing(name) }}</div>
+  <div>
+    <input type="text" data-bind="name" />
+  </div>
+</body>
+<script src="binder.js"></script>
+
+<script>
+  const app = new Binder("body", {
+    template: document.querySelector("body").innerHTML,
+    data: {
+      name: "World",
+      things: [1, 2, 3]
+    },
+    methods: {
+      nothing(val) {
+        return val
+      }
+    }
+  });
+</script>
