@@ -6,7 +6,7 @@ class Binder {
   constructor(
     target = "#app",
     initValues = {
-      template: "<div></div>",
+      template: null,
       data: {},
       computed: {},
       methods: {},
@@ -15,13 +15,13 @@ class Binder {
     }
   ) {
     const values = {
-      template: "<div></div>",
       data: {},
       computed: {},
       methods: {},
       watch: {},
       onStart: async () => null,
-      ...initValues
+      ...initValues,
+      template: initValues.template ? initValues.template : document.querySelector(target).innerHTML
     };
 
     const data = {};
