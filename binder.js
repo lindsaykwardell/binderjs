@@ -21,7 +21,9 @@ class Binder {
       watch: {},
       onStart: async () => null,
       ...initValues,
-      template: initValues.template ? initValues.template : document.querySelector(target).innerHTML
+      template: initValues.template
+        ? initValues.template
+        : document.querySelector(target).innerHTML
     };
 
     const data = {};
@@ -95,6 +97,26 @@ class Binder {
     else return "";
   };
 
+  valExists = (key, source = this) => {
+    if (typeof key === "string" && key.includes('"'))
+      return key.replace(/^\"+|\"+$/g, "");
+    const keys = key.split(".");
+    let returnVal = undefined;
+    keys.forEach(elemKey => {
+      if (elemKey.includes("[")) {
+        let keyBits = elemKey.split("[");
+        keyBits[1] = keyBits[1].replace("[", "").replace("]", "");
+        if (returnVal) {
+          returnVal = returnVal[keyBits[0]][keyBits[1]];
+        } else returnVal = source[keyBits[0]][keyBits[1]];
+      } else {
+        if (returnVal) returnVal = returnVal[elemKey];
+        else returnVal = source[elemKey];
+      }
+    });
+    return !!returnVal;
+  };
+
   start = async () => {
     let text = this.data.template;
 
@@ -166,7 +188,7 @@ class Binder {
       );
     });
     if (this.watch[key]) this.watch[key]();
-    this.recompute();
+    this.recompute(elem, source);
   };
 
   renderLoop = (node, val, index) => {
@@ -174,16 +196,17 @@ class Binder {
       node.innerHTML = "";
       val.forEach(elem => {
         let childNode = this.data.loops[index].cloneNode(true);
-        const matches = childNode.querySelectorAll("[data-val]");
-        matches.forEach(match => {
+        const dataMatches = childNode.querySelectorAll("[data-val]");
+        dataMatches.forEach(match => {
           this.render(match.getAttribute("data-val"), childNode, elem);
         });
+        this.recompute(childNode, elem);
         node.appendChild(childNode);
       });
     }
   };
 
-  recompute = () => {
+  recompute = (elem = this.data.root, source = this) => {
     const keys = Object.keys(this.computed);
 
     keys.forEach(key => {
@@ -193,7 +216,7 @@ class Binder {
       }
     });
 
-    const nodes = this.data.root.querySelectorAll("[data-method]");
+    const nodes = elem.querySelectorAll("[data-method]");
     nodes.forEach(node => {
       const func = node.getAttribute("data-method").split("(")[0];
       const args = node
@@ -201,11 +224,21 @@ class Binder {
         .split("(")[1]
         .replace(")", "")
         .split(",");
-      const result = this[func]
-        ? this[func](...args.map(arg => this.getVal(arg)))
-        : "";
-      if (result !== node.innerHTML) {
-        node.innerHTML = result;
+      try {
+        let proceed = true;
+        args.forEach(arg => {
+          if (!this.valExists(arg, source)) proceed = false;
+        });
+        if (proceed) {
+          const result = this[func]
+            ? this[func](...args.map(arg => this.getVal(arg, source)))
+            : "";
+          if (result !== node.innerHTML) {
+            node.innerHTML = result;
+          }
+        }
+      } catch (e) {
+        console.error(e)
       }
     });
   };
