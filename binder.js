@@ -77,24 +77,28 @@ class Binder {
   }
 
   getVal = (key, source = this) => {
-    if (typeof key === "string" && key.includes('"'))
-      return key.replace(/^\"+|\"+$/g, "");
-    const keys = key.split(".");
-    let returnVal = undefined;
-    keys.forEach(elemKey => {
-      if (elemKey.includes("[")) {
-        let keyBits = elemKey.split("[");
-        keyBits[1] = keyBits[1].replace("[", "").replace("]", "");
-        if (returnVal) {
-          returnVal = returnVal[keyBits[0]][keyBits[1]];
-        } else returnVal = source[keyBits[0]][keyBits[1]];
-      } else {
-        if (returnVal) returnVal = returnVal[elemKey];
-        else returnVal = source[elemKey];
-      }
-    });
-    if (returnVal) return returnVal;
-    else return "";
+    try {
+      if (typeof key === "string" && key.includes('"'))
+        return key.replace(/^\"+|\"+$/g, "");
+      const keys = key.split(".");
+      let returnVal = undefined;
+      keys.forEach(elemKey => {
+        if (elemKey.includes("[")) {
+          let keyBits = elemKey.split("[");
+          keyBits[1] = keyBits[1].replace("[", "").replace("]", "");
+          if (returnVal) {
+            returnVal = returnVal[keyBits[0]][keyBits[1]];
+          } else returnVal = source[keyBits[0]][keyBits[1]];
+        } else {
+          if (returnVal) returnVal = returnVal[elemKey];
+          else returnVal = source[elemKey];
+        }
+      });
+      if (returnVal) return returnVal;
+      else return "";
+    } catch (e) {
+      return "";
+    }
   };
 
   valExists = (key, source = this) => {
@@ -102,19 +106,35 @@ class Binder {
       return key.replace(/^\"+|\"+$/g, "");
     const keys = key.split(".");
     let returnVal = undefined;
+    let exists = true;
     keys.forEach(elemKey => {
-      if (elemKey.includes("[")) {
-        let keyBits = elemKey.split("[");
-        keyBits[1] = keyBits[1].replace("[", "").replace("]", "");
-        if (returnVal) {
-          returnVal = returnVal[keyBits[0]][keyBits[1]];
-        } else returnVal = source[keyBits[0]][keyBits[1]];
-      } else {
-        if (returnVal) returnVal = returnVal[elemKey];
-        else returnVal = source[elemKey];
+      if (exists) {
+        if (elemKey.includes("[")) {
+          let keyBits = elemKey.split("[");
+          keyBits[1] = keyBits[1].replace("[", "").replace("]", "");
+          if (returnVal) {
+            exists =
+              returnVal.hasOwnProperty(keyBits[0]) &&
+              returnVal.hasOwnProperty(keyBits[0][keyBits[1]]);
+            if (exists) returnVal = returnVal[keyBits[0]][keyBits[1]];
+          } else {
+            exists =
+              source.hasOwnProperty(keyBits[0]) &&
+              source.hasOwnProperty(keyBits[0][keyBits[1]]);
+            if (exists) returnVal = source[keyBits[0]][keyBits[1]];
+          }
+        } else {
+          if (returnVal) {
+            exists = returnVal.hasOwnProperty(elemKey);
+            if (exists) returnVal = returnVal[elemKey];
+          } else {
+            exists = source.hasOwnProperty(elemKey);
+            returnVal = source[elemKey];
+          }
+        }
       }
     });
-    return !!returnVal;
+    return exists;
   };
 
   start = async () => {
@@ -140,22 +160,26 @@ class Binder {
             : "";
           val = `<span data-method="${key}">${result}</span>`;
         } else {
-          val = `<span data-val="${key}" class="__${
-            key.split(".")[0].split("[")[0]
-          }-bind">${this.getVal(key)}</span>`;
+          val = `<span data-val="${key}">${this.getVal(key)}</span>`;
         }
         text = text.replace(match, val);
       });
     this.data.root.innerHTML = text;
     const loops = this.data.root.querySelectorAll("[data-for]");
+
+    loops.forEach((loop, index) => {
+      loop.setAttribute("data-loop", index);
+    });
     loops.forEach(loop => {
-      const node = loop.children[0];
-      const len = this.data.loops.push(node);
-      loop.setAttribute("data-loop", len - 1);
+      const node = loop.cloneNode(true);
+      node.removeAttribute("data-for");
+      this.data.loops.push(node);
+    });
+    loops.forEach(loop => {
       this.renderLoop(
         loop,
-        this.getVal(loop.getAttribute("data-for")),
-        len - 1
+        loop.getAttribute("data-for"),
+        loop.getAttribute("data-loop")
       );
     });
     const bounds = this.data.root.querySelectorAll("[data-bind]");
@@ -170,7 +194,7 @@ class Binder {
   };
 
   render = (key, elem = this.data.root, source = this) => {
-    const mounts = elem.querySelectorAll(`.__${key}-bind`);
+    const mounts = elem.querySelectorAll(`[data-val='${key}']`);
     mounts.forEach(elem => {
       let val = elem.getAttribute("data-val");
       elem.innerHTML = this.getVal(val, source);
@@ -183,24 +207,38 @@ class Binder {
     loops.forEach(loop => {
       this.renderLoop(
         loop,
-        this.getVal(loop.getAttribute("data-for")),
-        loop.getAttribute("data-loop")
+        loop.getAttribute("data-for"),
+        loop.getAttribute("data-loop"),
+        source
       );
     });
     if (this.watch[key]) this.watch[key]();
     this.recompute(elem, source);
   };
 
-  renderLoop = (node, val, index) => {
-    if (Array.isArray(val)) {
+  renderLoop = (node, val, index, source = this) => {
+    const loopBits = val.split(" in ");
+    const data = this.getVal(loopBits[1], source);
+    if (Array.isArray(data)) {
       node.innerHTML = "";
-      val.forEach(elem => {
+      data.forEach(elem => {
+        const loopElem = {};
+        loopElem[loopBits[0]] = elem;
         let childNode = this.data.loops[index].cloneNode(true);
         const dataMatches = childNode.querySelectorAll("[data-val]");
         dataMatches.forEach(match => {
-          this.render(match.getAttribute("data-val"), childNode, elem);
+          this.render(match.getAttribute("data-val"), childNode, loopElem);
         });
-        this.recompute(childNode, elem);
+        const loopMatches = childNode.querySelectorAll("[data-for]");
+        loopMatches.forEach(loop => {
+          this.renderLoop(
+            loop,
+            loop.getAttribute("data-for"),
+            loop.getAttribute("data-loop"),
+            loopElem
+          );
+        });
+        this.recompute(childNode, loopElem);
         node.appendChild(childNode);
       });
     }
@@ -238,7 +276,7 @@ class Binder {
           }
         }
       } catch (e) {
-        console.error(e)
+        console.error(e);
       }
     });
   };
