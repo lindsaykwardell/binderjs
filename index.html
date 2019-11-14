@@ -10,7 +10,7 @@
   </div>
   <div data-for="array1 in things">
     <div data-for="array2 in array1">
-      {{ array2 }}
+      {{ array2 }} says {{ dog }} ({{ nothing(array1[0]) }})
     </div>
   </div>
 </body>
@@ -18,10 +18,15 @@
 
 <script>
   const app = new Binder("body", {
-    template: document.querySelector("body").innerHTML,
+    // template: document.querySelector("body").innerHTML,
     data: {
       name: "World",
       things: [[1, 2], [3, 4], [5, 6]]
+    },
+    computed: {
+      dog() {
+        return 'Bark!'
+      }
     },
     methods: {
       nothing(val) {

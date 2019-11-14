@@ -115,12 +115,12 @@ class Binder {
           if (returnVal) {
             exists =
               returnVal.hasOwnProperty(keyBits[0]) &&
-              returnVal.hasOwnProperty(keyBits[0][keyBits[1]]);
+              keyBits[0].hasOwnProperty([keyBits[1]]);
             if (exists) returnVal = returnVal[keyBits[0]][keyBits[1]];
           } else {
             exists =
               source.hasOwnProperty(keyBits[0]) &&
-              source.hasOwnProperty(keyBits[0][keyBits[1]]);
+              keyBits[0].hasOwnProperty([keyBits[1]]);
             if (exists) returnVal = source[keyBits[0]][keyBits[1]];
           }
         } else {
@@ -136,6 +136,15 @@ class Binder {
     });
     return exists;
   };
+
+  getValFromMultipleSources = (val, potentialSources) => {
+    for (const source of potentialSources) {
+      if (this.valExists(val, source)) {
+        return this.getVal(val, source);
+      }
+    }
+    return '';
+  }
 
   start = async () => {
     let text = this.data.template;
@@ -193,15 +202,16 @@ class Binder {
     this.recompute();
   };
 
-  render = (key, elem = this.data.root, source = this) => {
+  render = (key, elem = this.data.root, source = this, ...addlSources) => {
     const mounts = elem.querySelectorAll(`[data-val='${key}']`);
+    const potentialSources = [source, ...addlSources]
     mounts.forEach(elem => {
       let val = elem.getAttribute("data-val");
-      elem.innerHTML = this.getVal(val, source);
+      elem.innerHTML = this.getValFromMultipleSources(val, potentialSources);
     });
     const bounds = elem.querySelectorAll(`[data-bind='${key}']`);
     bounds.forEach(elem => {
-      elem.value = this.getVal(elem.getAttribute("data-bind"), source);
+      elem.value = this.getValFromMultipleSources(elem.getAttribute("data-bind"), potentialSources)
     });
     const loops = elem.querySelectorAll(`[data-for='${key}']`);
     loops.forEach(loop => {
@@ -209,14 +219,15 @@ class Binder {
         loop,
         loop.getAttribute("data-for"),
         loop.getAttribute("data-loop"),
-        source
+        source,
+        ...addlSources
       );
     });
     if (this.watch[key]) this.watch[key]();
     this.recompute(elem, source);
   };
 
-  renderLoop = (node, val, index, source = this) => {
+  renderLoop = (node, val, index, source = this, ...addlSources) => {
     const loopBits = val.split(" in ");
     const data = this.getVal(loopBits[1], source);
     if (Array.isArray(data)) {
@@ -227,7 +238,7 @@ class Binder {
         let childNode = this.data.loops[index].cloneNode(true);
         const dataMatches = childNode.querySelectorAll("[data-val]");
         dataMatches.forEach(match => {
-          this.render(match.getAttribute("data-val"), childNode, loopElem);
+          this.render(match.getAttribute("data-val"), childNode, loopElem, source, ...addlSources);
         });
         const loopMatches = childNode.querySelectorAll("[data-for]");
         loopMatches.forEach(loop => {
@@ -235,7 +246,9 @@ class Binder {
             loop,
             loop.getAttribute("data-for"),
             loop.getAttribute("data-loop"),
-            loopElem
+            loopElem,
+            source,
+            ...addlSources
           );
         });
         this.recompute(childNode, loopElem);
