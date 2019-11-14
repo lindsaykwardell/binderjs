@@ -213,7 +213,7 @@ class Binder {
     bounds.forEach(elem => {
       elem.value = this.getValFromMultipleSources(elem.getAttribute("data-bind"), potentialSources)
     });
-    const loops = elem.querySelectorAll(`[data-for='${key}']`);
+    const loops = elem.querySelectorAll(`[data-for*='${key}']`);
     loops.forEach(loop => {
       this.renderLoop(
         loop,
